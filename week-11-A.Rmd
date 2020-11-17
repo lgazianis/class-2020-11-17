@@ -32,20 +32,71 @@ week_11 <- shaming %>%
 
 1) How many voters got which treatments and how many voted in the 2006 primary? 
 
+```{r}
+
+week_11 %>%
+  count(treatment)
+
+week_11 %>%
+  count(primary_06 == 1)
+
+```
+
+
 2) Explore `birth_year`. Does it make sense? If we got handed a new data set for today, would `birth_year` mean the same thing? Might we want to transform it into something different so that our model would "work" with today's data?
+
+Age could be more enjoyable to work with. 
 
 3) There are a bunch of voting records. What do they mean? Are they all recorded in the same way? How are they connected to each other? Do we want to use them all?
 
+```{r}
+
+week_11 %>%
+  count(general_04)
+
+```
+
+
 4) Explore the `no_of_names` variable? How is it distributed? What does it mean? Can we use it in our modeling?
 
+Would not be very helpful; data missing for 80% of sample.
+
 5) Check out `hh_size`. What does it mean? Is the distribution sensible? Might it be a good idea to create a new variable which is more likely to capture an effect of interest? For example, I bet that that there is a big difference between living by yourself and living with other people. I bet that there is much less difference between living with 3 versus 4 people.
+
+Could classify the households with individual, medium or small, or binary alone/not.
 
 6) Are the factor levels for treatment convenient? Try a simple regression and see! How can we change them?
 
 Perform other exploratory data analysis.  What other variables are connected to voting? What other variables are suspect/concerning?
 
+```{r}
+
+q6 <- stan_glm(primary_06 ~ treatment,
+               data = week_11,
+               refresh = 0) %>%
+  print(digits = 5)
+
+```
+
+
 7) Create a new data set, `week_11_clean`, which makes whatever corrections/improvements you think are a good idea. We will use that data set for the next two Scenes.
 
+```{r}
+
+week_11_clean <- week_11 %>%
+  mutate(age = 2006 - birth_year,
+         treatment = fct_relevel(treatment, "control", "self"),
+         isSolo = ifelse(hh_size == 1, "TRUE", "FALSE"))
+
+week_11_clean %>% count(treatment)
+
+q7 <- stan_glm(data = week_11_clean,
+               fresh = 0,
+               family = gaussian(),
+               primary_06 ~ treatment) %>%
+  print(digits = 5)
+
+```
 
 
 ## Scene 2
@@ -54,7 +105,38 @@ Perform other exploratory data analysis.  What other variables are connected to 
 
 * Let's be disciplined. Split up the data and only use the training data for the rest of today. 
 
+```{r}
+
+week_11_clean_split <- week_11_clean %>% initial_split()
+
+week_11_clean_train <- training(week_11_clean_split)
+
+week_11_test <- testing(week_11_clean_split)
+
+week_11_folds <- vfold_cv(week_11_clean_train, v = 4)
+
+```
+
+
 * Use stan_glm() to estimate a model of `primary_06` as a function of `treatment`. Write a sentence or two interpreting the important parameters. (Hint: Try it both with and without an intercept.)
+
+```{r}
+s2 <- stan_glm(primary_06 ~ treatment,
+         refresh = 0,
+         data = week_11_test) %>%
+  print(digits = 5)
+
+s3 <- stan_glm(primary_06 ~ treatment - 1,
+               refresh = 0,
+               data = week_11_test) %>%
+  print(digits = 5)
+
+tibble(prediction1 = predict(s2),
+       prediction2 = predict(s3)) %>%
+  ggplot(aes(x = prediction1, y = prediction2)) + geom_point()
+
+```
+
 
 * Use the value of MAD_SD to discuss the magnitude/importance of various coefficients. Refer to this image, courtesy of Tyler.
 
@@ -74,8 +156,31 @@ knitr::include_graphics("simko_importance.png")
 
 **Prompt:** Explore a variety models which explain `primary_06` as a function of the variables in our data set. Make sure to explore some interaction terms. 
 
+```{r}
+
+s3.1 <- stan_glm(data = week_11_clean,
+                 primary_06 ~ primary_02 + general_02,
+                 refresh = 0) %>%
+  print(digits = 5)
+
+s3.2 <- stan_glm(data = week_11_clean,
+                 primary_06 ~ age,
+                 refresh = 0) %>%
+  print(digits = 5)
+
+s3.3 <- stan_glm(data = week_11_clean,
+                 primary_06 ~ isSolo + primary_02 + general_02 + age + age*isSolo,
+                 refresh = 0) %>% 
+  print(digits = 5)
+
+```
+
+
 * Come up with at least two models that a) you like and would be willing to defend and b) are somewhat different from one another. The two most common model types in these situations are "simple" and "full". The former includes a minimum number of variables. The latter errs on the side of variable inclusion and the creation of interaction terms.
 
-* What does it mean if, for example, the coefficient of `treatmentNeighbors` varies across models? 
+* What does it mean if, for example, the coefficient of `treatmentNeighbors` varies across models?
+
+
+
 * Do things change if we start using all the data? Is there a danger in doing so?
 
